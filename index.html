@@ -382,6 +382,7 @@ function renderSpeaking() {
     </div>
 
     <button id="micBtn" class="btn-main" style="background:#FAF9F6; color:#1E1E1C; border:1px solid #C9C6BD;">녹음 시작</button>
+    <div id="typeToggleBtn" style="margin-top:10px; text-align:center; font-family:'Paperlogy', sans-serif; font-size:11px; color:#8A2A22; cursor:pointer; text-decoration:underline;">또는 텍스트로 답변 입력하기</div>
     <div id="waveBox" class="hidden" style="gap:4px; align-items:center; justify-content:center; height:24px; margin:10px 0;"></div>
     <div id="micUnavailableNote" class="hidden" style="font-size:12px; color:#a32d2d; margin-top:8px;">이 미리보기에서는 마이크 접근이 막혀 있어요. 아래에 답변을 타이핑해보세요.</div>
     <textarea id="typedAnswer" rows="3" class="hidden" style="margin-top:10px;" placeholder="여기에 영어로 답변을 타이핑해보세요"></textarea>
@@ -415,6 +416,12 @@ function renderSpeaking() {
   typedAnswer.addEventListener('input', () => {
     finalTranscript = typedAnswer.value;
     feedbackBtn.classList.toggle('hidden', !finalTranscript.trim());
+  });
+
+  document.getElementById('typeToggleBtn').addEventListener('click', function() {
+    typedAnswer.classList.remove('hidden');
+    typedAnswer.focus();
+    this.classList.add('hidden');
   });
 
   micBtn.addEventListener('click', async () => {
