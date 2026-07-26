@@ -70,24 +70,29 @@ const STATE = {
   archive: []
 };
 
+async function kvCall(body) {
+  const res = await fetch('/api/kv', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  return res.json();
+}
+
 const storage = {
   async get(key) {
-    const v = localStorage.getItem(key);
-    return v !== null ? { value: v } : null;
+    const data = await kvCall({ action: 'get', key });
+    return data.value !== null && data.value !== undefined ? { value: data.value } : null;
   },
   async set(key, value) {
-    localStorage.setItem(key, value);
+    await kvCall({ action: 'set', key, value });
   },
   async delete(key) {
-    localStorage.removeItem(key);
+    await kvCall({ action: 'delete', key });
   },
   async list(prefix) {
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(prefix)) keys.push(k);
-    }
-    return { keys };
+    const data = await kvCall({ action: 'list', prefix });
+    return { keys: data.keys || [] };
   }
 };
 
@@ -568,6 +573,7 @@ function renderFeedback() {
       feedback: STATE.feedback
     });
     await saveArchive();
+    await storage.delete(cacheKeyFor(STATE.industry));
     STATE.session = null; STATE.view = null; STATE.feedback = null;
     render();
   });
