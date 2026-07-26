@@ -1,0 +1,9 @@
+{
+  "name": "daily-desk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Daily Desk - business English learning app",
+  "scripts": {
+    "dev": "vercel dev"
+  }
+}

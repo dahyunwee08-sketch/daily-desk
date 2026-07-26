@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Daily Desk</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy/subsets/Paperlogy-dynamic-subset.css">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Pretendard', sans-serif;
+    background: #1E1E1C;
+    color: #1E1E1C;
+    margin: 0;
+    padding: 24px 12px;
+    word-break: keep-all;
+  }
+  .app {
+    max-width: 420px;
+    margin: 0 auto;
+    background: #EDEBE6;
+    border-radius: 20px;
+    padding: 1.75rem 1.25rem 2rem;
+    min-height: 70vh;
+  }
+  .masthead {
+    text-align: center; font-family: 'Playfair Display', serif; font-weight: 900;
+    font-size: 22px; border-top: 2px double #1E1E1C; border-bottom: 2px double #1E1E1C;
+    padding: 8px 0; margin-bottom: 5px;
+  }
+  .meta-row { display:flex; justify-content:space-between; font-family:'Paperlogy', sans-serif; font-size:11px; color:#6b6b66; margin-bottom:18px; }
+  .pill { font-family:'Paperlogy', sans-serif; font-weight:500; font-size:12px; padding:5px 12px; border-radius:14px; }
+  .pill-active { background:#1E1E1C; color:#EDEBE6; }
+  .pill-outline { border:1px solid #C9C6BD; color:#6b6b66; background:none; cursor:pointer; }
+  .card { background:#FAF9F6; border:1px solid #D8D5CC; border-radius:10px; padding:16px 17px; }
+  .label { font-family:'Paperlogy', sans-serif; font-weight:600; font-size:11px; color:#8A2A22; letter-spacing:0.03em; margin-bottom:9px; text-transform:uppercase; }
+  .btn-main { background:#1E1E1C; color:#EDEBE6; font-family:'Paperlogy', sans-serif; font-weight:600; font-size:14px; padding:13px 0; border-radius:8px; text-align:center; cursor:pointer; border:none; width:100%; }
+  .btn-secondary { border:1px solid #C9C6BD; border-radius:8px; padding:11px 0; text-align:center; font-family:'Paperlogy', sans-serif; font-weight:500; font-size:12px; color:#1E1E1C; background:none; cursor:pointer; flex:1; }
+  .btn-disabled { background:#C9C6BD; color:#FAF9F6; }
+  .back-row { display:flex; align-items:center; gap:8px; margin-bottom:20px; cursor:pointer; }
+  .page-title { font-family:'Playfair Display', serif; font-weight:700; font-size:17px; }
+  input[type=text] { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #C9C6BD; font-size:14px; font-family:'Pretendard', sans-serif; background:#FAF9F6; }
+  textarea { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #C9C6BD; font-size:13px; font-family:'Pretendard', sans-serif; background:#FAF9F6; }
+  .hidden { display:none; }
+  .expr-term { font-family:'Pretendard', sans-serif; font-weight:600; font-size:15px; color:#1E1E1C; }
+  .expr-meaning { font-family:'Pretendard', sans-serif; font-size:12px; color:#8A8983; margin-top:3px; }
+  .expr-example { font-family:'Pretendard', sans-serif; font-size:12px; color:#5F5E5A; font-style:italic; margin-top:8px; }
+  .heart { font-size:17px; cursor:pointer; user-select:none; }
+  .heart-off { color:#C9C6BD; }
+  .heart-on { color:#8A2A22; }
+  .wave-bar { width:4px; border-radius:2px; background:#8A2A22; animation: waveScale 0.9s ease-in-out infinite; }
+  @keyframes waveScale { 0%, 100% { height:6px; } 50% { height:22px; } }
+</style>
+</head>
+<body>
+
+<div class="app" id="app"></div>
+
+<script>
+const PRESET_INDUSTRIES = ['모빌리티', 'F&B', '뷰티', '패션', '금융', 'IT·테크', '콘텐츠'];
+
+const STATE = {
+  industry: '뮤지컬',
+  industryHistory: ['뮤지컬'],
+  session: null,
+  transcript: '',
+  scraps: [],
+  archive: []
+};
+
+const storage = {
+  async get(key) {
+    const v = localStorage.getItem(key);
+    return v !== null ? { value: v } : null;
+  },
+  async set(key, value) {
+    localStorage.setItem(key, value);
+  },
+  async delete(key) {
+    localStorage.removeItem(key);
+  },
+  async list(prefix) {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) keys.push(k);
+    }
+    return { keys };
+  }
+};
+
+async function loadStorageData() {
+  try {
+    const s = await storage.get('scraps');
+    STATE.scraps = s ? JSON.parse(s.value) : [];
+  } catch(e) { STATE.scraps = []; }
+  try {
+    const a = await storage.get('archive');
+    STATE.archive = a ? JSON.parse(a.value) : [];
+  } catch(e) { STATE.archive = []; }
+  try {
+    const pref = await storage.get('prefs');
+    if (pref) {
+      const p = JSON.parse(pref.value);
+      if (p.industry) STATE.industry = p.industry;
+      if (p.industryHistory && p.industryHistory.length) STATE.industryHistory = p.industryHistory;
+    }
+  } catch(e) {}
+}
+
+async function savePrefs() {
+  await storage.set('prefs', JSON.stringify({ industry: STATE.industry, industryHistory: STATE.industryHistory }));
+}
+
+function cacheKeyFor(industry) {
+  return 'issue_' + todayLabel() + '_' + industry;
+}
+
+async function getCachedIssue(industry) {
+  try {
+    const r = await storage.get(cacheKeyFor(industry));
+    return r ? JSON.parse(r.value) : null;
+  } catch(e) { return null; }
+}
+
+async function setCachedIssue(industry, data) {
+  await storage.set(cacheKeyFor(industry), JSON.stringify(data));
+}
+
+async function switchIndustry(newIndustry) {
+  STATE.industry = newIndustry;
+  if (!STATE.industryHistory.includes(newIndustry)) STATE.industryHistory.push(newIndustry);
+  await savePrefs();
+  STATE.session = null;
+  goHome();
+}
+
+async function saveScraps() {
+  await storage.set('scraps', JSON.stringify(STATE.scraps));
+}
+async function saveArchive() {
+  await storage.set('archive', JSON.stringify(STATE.archive));
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+function isScraped(term) {
+  return STATE.scraps.some(s => s.term === term);
+}
+
+function toggleScrap(expr) {
+  const idx = STATE.scraps.findIndex(s => s.term === expr.term);
+  if (idx >= 0) STATE.scraps.splice(idx, 1);
+  else STATE.scraps.push(expr);
+  saveScraps();
+  render();
+}
+
+const app = document.getElementById('app');
+
+function render() {
+  if (!STATE.session) renderHome();
+  else if (STATE.view === 'expressions') renderExpressions();
+  else if (STATE.view === 'speaking') renderSpeaking();
+  else if (STATE.view === 'feedback') renderFeedback();
+  else if (STATE.view === 'scraps') renderScraps();
+  else if (STATE.view === 'archive') renderArchive();
+  else renderHome();
+}
+
+function renderHomeShell() {
+  const chips = STATE.industryHistory.map(ind => {
+    const active = ind === STATE.industry;
+    return `<button class="pill ${active ? 'pill-active' : 'pill-outline'}" data-ind="${escapeHtml(ind)}">${escapeHtml(ind)}</button>`;
+  }).join('');
+
+  app.innerHTML = `
+    <div class="masthead">THE DAILY DESK</div>
+    <div class="meta-row"><span>No. ${STATE.archive.length + 1}</span><span>${todayLabel()}</span></div>
+    <div style="display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap;">
+      ${chips}
+      <button class="pill pill-outline" id="chooseIndustryBtn">관심 분야</button>
+    </div>
+    <div id="homeBody"></div>
+  `;
+  document.querySelectorAll('[data-ind]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ind = btn.getAttribute('data-ind');
+      if (ind !== STATE.industry) switchIndustry(ind);
+    });
+  });
+  document.getElementById('chooseIndustryBtn').addEventListener('click', openIndustryPicker);
+}
+
+function openIndustryPicker() {
+  const presetHtml = PRESET_INDUSTRIES.map(p => `<button class="pill pill-outline" data-preset="${escapeHtml(p)}" style="margin:4px 4px 0 0;">${escapeHtml(p)}</button>`).join('');
+  app.innerHTML = `
+    <div class="back-row" id="backBtn">
+      <span style="font-family:'Paperlogy', sans-serif; font-size:16px;">←</span>
+      <span style="font-family:'Paperlogy', sans-serif; font-weight:600; font-size:17px; color:#1E1E1C;">관심 분야</span>
+    </div>
+    <div style="font-family:'Pretendard', sans-serif; font-size:12px; color:#8A8983; margin-bottom:16px;">구체적인 키워드를 입력하면 정확도가 올라가요.</div>
+    <div style="display:flex; flex-wrap:wrap; margin-bottom:16px;">${presetHtml}</div>
+    <button class="pill pill-outline" id="etcBtn" style="width:100%; padding:10px 0;">기타 (직접 입력)</button>
+    <div id="etcInputWrap" class="hidden" style="margin-top:12px;">
+      <input type="text" id="etcInput" placeholder="예: 반도체, 노트북, 항공">
+      <button class="btn-main" style="margin-top:8px;" id="etcSubmitBtn">이 분야로 시작</button>
+    </div>
+  `;
+  document.getElementById('backBtn').addEventListener('click', () => goHome());
+  document.querySelectorAll('[data-preset]').forEach(btn => {
+    btn.addEventListener('click', () => switchIndustry(btn.getAttribute('data-preset')));
+  });
+  document.getElementById('etcBtn').addEventListener('click', () => {
+    document.getElementById('etcInputWrap').classList.remove('hidden');
+  });
+  document.getElementById('etcSubmitBtn').addEventListener('click', () => {
+    const v = document.getElementById('etcInput').value.trim();
+    if (v) switchIndustry(v);
+  });
+}
+
+function goHome() {
+  STATE.view = null;
+  renderHomeShell();
+  if (STATE.session) renderHomeCard();
+  else fetchTodayIssue();
+}
+
+function renderHome() {
+  goHome();
+}
+
+async function fetchTodayIssue() {
+  const homeBody = document.getElementById('homeBody');
+
+  const cached = await getCachedIssue(STATE.industry);
+  if (cached) {
+    STATE.session = cached;
+    renderHomeCard();
+    return;
+  }
+
+  homeBody.innerHTML = `<div class="card" style="text-align:center; color:#8A8983; font-family:'Pretendard',sans-serif; font-size:13px;">오늘의 이슈를 찾는 중...</div>`;
+
+  const musicalKeywords = ['뮤지컬', '공연', '브로드웨이', '연극'];
+  const isMusical = musicalKeywords.some(k => STATE.industry.includes(k));
+  const outlets = isMusical ? 'deadline.com, playbill.com, whatsonstage.com' : 'nytimes.com, bbc.com';
+  const todayStr = new Date().toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' });
+
+  const systemPrompt = `당신은 업무 영어회화 학습 앱의 뉴스 큐레이터입니다.
+사용자가 지정한 업계의 "오늘 시점 기준 최근 뉴스"를 웹 검색으로 찾아서, 학습자에게 보여줄 콘텐츠를 만듭니다.
+속도가 중요합니다: 웹 검색은 최대 2회만 사용하고, 그 안에서 바로 판단해서 답하세요.
+
+선정 기준: 1) 업계 전체에 영향을 주는 파급력 2) 최근성 3) 영어 비즈니스 회화 표현을 뽑아내기 좋은 소재 (가십성보다 실질적 이슈 선호)
+
+작업 순서:
+1. 지정 매체 위주로 웹 검색 (최대 2회)
+2. 가장 좋은 이슈 1개를 메인으로 선정, 나머지는 우선순위 순 최대 3개
+3. 메인 이슈의 헤드라인은 영어 원문 한 줄 + 한국어 번역 한 줄을 함께 제공
+4. 비즈니스 회화 표현 3개 (뉴스 속 표현), 비즈니스 상황 문장 2개
+5. 30초 스피킹 연습 상황을 영어로 작성 (학습자가 답할 상황)
+6. 기사 원문을 그대로 베끼지 말고 새로 요약. 간결하게.
+
+반드시 JSON만 출력 (마크다운 없이):
+{
+  "headlineEn": "영어 헤드라인 한 줄",
+  "headlineKo": "한국어 번역 한 줄",
+  "contextEn": "영어로 왜 중요한지 한 문장",
+  "expressions": [{"term":"...", "meaning":"...", "example":"..."}],
+  "businessPhrases": ["...", "..."],
+  "speakingPromptEn": "영어로 작성한 스피킹 상황 설명",
+  "speakingPromptKo": "한국어로 작성한 같은 상황 설명",
+  "otherIssues": [{"category":"...", "headline":"..."}]
+}`;
+
+  const userMessage = `업계: ${STATE.industry}\n오늘 날짜: ${todayStr}\n반드시 오늘 날짜 기준 기사만 사용하세요. 없으면 가장 최근 날짜를 contextEn 끝에 괄호로 표기하세요.\n검색 시 다음 매체를 우선 사용하세요 (site: 검색 활용): ${outlets}`;
+
+  try {
+    const response = await fetch("/api/issue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ systemPrompt, userMessage })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '서버 오류가 발생했어요');
+    const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n");
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("응답에서 JSON을 찾지 못했어요");
+    const parsed = JSON.parse(jsonMatch[0]);
+    STATE.session = parsed;
+    await setCachedIssue(STATE.industry, parsed);
+    renderHomeCard();
+  } catch (err) {
+    homeBody.innerHTML = `<div class="card" style="color:#a32d2d; font-family:'Pretendard',sans-serif; font-size:13px;">오류: ${escapeHtml(err.message)}</div>
+      <button class="btn-main" style="margin-top:12px;" onclick="fetchTodayIssue()">다시 시도</button>`;
+  }
+}
+
+function renderHomeCard() {
+  const s = STATE.session;
+  document.getElementById('homeBody').innerHTML = `
+    <div class="card">
+      <div class="label">HEADLINE</div>
+      <div style="font-family:'Playfair Display', serif; font-weight:700; font-size:17px; color:#1E1E1C; line-height:1.45; margin-bottom:7px;">${escapeHtml(s.headlineEn)}</div>
+      <div style="font-family:'Pretendard', sans-serif; font-size:13px; color:#8A8983; margin-bottom:11px;">${escapeHtml(s.headlineKo)}</div>
+      <div style="height:1px; background:#E3E0D6; margin-bottom:11px;"></div>
+      <div style="font-family:'Pretendard', sans-serif; font-size:12px; color:#8A8983;">${escapeHtml(s.contextEn)}</div>
+    </div>
+    <button class="btn-main" style="margin-top:18px; margin-bottom:10px;" id="startBtn">오늘의 학습 시작</button>
+    <div style="display:flex; gap:8px;">
+      <button class="btn-secondary" id="scrapBtn"><span style="margin-right:6px;">♥</span>스크랩</button>
+      <button class="btn-secondary" id="archiveBtn"><span style="font-family:'Playfair Display',serif; margin-right:6px;">№</span>지난 호</button>
+    </div>
+  `;
+  document.getElementById('startBtn').addEventListener('click', () => { STATE.view = 'expressions'; render(); });
+  document.getElementById('scrapBtn').addEventListener('click', () => { STATE.view = 'scraps'; render(); });
+  document.getElementById('archiveBtn').addEventListener('click', () => { STATE.view = 'archive'; render(); });
+}
+
+function renderExpressions() {
+  const s = STATE.session;
+  const exprHtml = s.expressions.map(e => `
+    <div class="card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-start;">
+      <div>
+        <div class="expr-term">${escapeHtml(e.term)}</div>
+        <div class="expr-meaning">${escapeHtml(e.meaning)}</div>
+        <div class="expr-example">"${escapeHtml(e.example)}"</div>
+      </div>
+      <div class="heart ${isScraped(e.term) ? 'heart-on' : 'heart-off'}" data-term="${escapeHtml(e.term)}">${isScraped(e.term) ? '♥' : '♡'}</div>
+    </div>
+  `).join('');
+
+  const phraseHtml = s.businessPhrases.map(p => `
+    <div class="card" style="margin-bottom:10px;"><div style="font-family:'Pretendard', sans-serif; font-size:13px; color:#1E1E1C;">"${escapeHtml(p)}"</div></div>
+  `).join('');
+
+  app.innerHTML = `
+    <div class="back-row" id="backBtn">
+      <span style="font-family:'Paperlogy', sans-serif; font-size:16px;">←</span>
+      <span class="page-title">Vocabulary desk</span>
+    </div>
+    <div class="label" style="text-transform:uppercase;">NEWS EXPRESSIONS</div>
+    ${exprHtml}
+    <div style="margin-top:10px;"></div>
+    <div class="label" style="text-transform:uppercase;">BUSINESS EXPRESSIONS</div>
+    ${phraseHtml}
+    <button class="btn-main" style="margin-top:10px;" id="toSpeakingBtn">스피킹 연습</button>
+  `;
+  document.getElementById('backBtn').addEventListener('click', () => { goHome(); });
+  document.getElementById('toSpeakingBtn').addEventListener('click', () => { STATE.view = 'speaking'; render(); });
+  document.querySelectorAll('.heart').forEach(h => {
+    h.addEventListener('click', () => {
+      const term = h.getAttribute('data-term');
+      const expr = s.expressions.find(e => e.term === term);
+      toggleScrap(expr);
+    });
+  });
+}
+
+let recognition = null, isRecording = false, finalTranscript = '', lastInterim = '';
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function renderSpeaking() {
+  const s = STATE.session;
+  app.innerHTML = `
+    <div class="back-row" id="backBtn">
+      <span style="font-family:'Paperlogy', sans-serif; font-size:16px;">←</span>
+      <span class="page-title">Speaking desk</span>
+    </div>
+    <div class="card" style="margin-bottom:20px;">
+      <div class="label">TODAY'S SITUATION</div>
+      <div style="font-family:'Pretendard', sans-serif; font-size:13px; color:#1E1E1C; line-height:1.65;">${escapeHtml(s.speakingPromptEn)}</div>
+      <div id="koToggle" style="margin-top:10px; font-family:'Paperlogy', sans-serif; font-size:11px; color:#8A2A22; cursor:pointer; display:inline-block; border-bottom:1px solid #8A2A22;">한국어 텍스트 보기</div>
+      <div id="koText" class="hidden" style="margin-top:8px; padding-top:10px; border-top:1px solid #E3E0D6; font-family:'Pretendard', sans-serif; font-size:12px; color:#8A8983; line-height:1.6;">${escapeHtml(s.speakingPromptKo)}</div>
+    </div>
+
+    <button id="micBtn" class="btn-main" style="background:#FAF9F6; color:#1E1E1C; border:1px solid #C9C6BD;">녹음 시작</button>
+    <div id="waveBox" class="hidden" style="gap:4px; align-items:center; justify-content:center; height:24px; margin:10px 0;"></div>
+    <div id="micUnavailableNote" class="hidden" style="font-size:12px; color:#a32d2d; margin-top:8px;">이 미리보기에서는 마이크 접근이 막혀 있어요. 아래에 답변을 타이핑해보세요.</div>
+    <textarea id="typedAnswer" rows="3" class="hidden" style="margin-top:10px;" placeholder="여기에 영어로 답변을 타이핑해보세요"></textarea>
+    <div id="transcriptBox" class="hidden" style="margin-top:12px; font-size:13px; background:#FAF9F6; border:1px solid #D8D5CC; border-radius:8px; padding:10px 12px;"></div>
+    <button id="feedbackBtn" class="hidden btn-main" style="margin-top:12px;">피드백 받기</button>
+    <div id="feedbackLoading" class="hidden" style="font-size:12px; color:#8A8983; margin-top:8px; text-align:center;">피드백 생성 중...</div>
+  `;
+
+  document.getElementById('backBtn').addEventListener('click', () => { STATE.view = 'expressions'; render(); });
+  document.getElementById('koToggle').addEventListener('click', function() {
+    const el = document.getElementById('koText');
+    const showing = !el.classList.contains('hidden');
+    el.classList.toggle('hidden');
+    this.textContent = showing ? '한국어 텍스트 보기' : '한국어 텍스트 닫기';
+  });
+
+  const waveBox = document.getElementById('waveBox');
+  for (let i = 0; i < 5; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'wave-bar';
+    bar.style.animationDelay = (i * 0.12) + 's';
+    waveBox.appendChild(bar);
+  }
+
+  const micBtn = document.getElementById('micBtn');
+  const transcriptBox = document.getElementById('transcriptBox');
+  const feedbackBtn = document.getElementById('feedbackBtn');
+  const micUnavailableNote = document.getElementById('micUnavailableNote');
+  const typedAnswer = document.getElementById('typedAnswer');
+
+  typedAnswer.addEventListener('input', () => {
+    finalTranscript = typedAnswer.value;
+    feedbackBtn.classList.toggle('hidden', !finalTranscript.trim());
+  });
+
+  micBtn.addEventListener('click', async () => {
+    if (!SpeechRecognitionAPI) { alert('이 브라우저는 음성 인식을 지원하지 않아요.'); return; }
+    if (isRecording) { recognition.stop(); return; }
+
+    transcriptBox.classList.remove('hidden');
+    transcriptBox.textContent = '마이크 권한 확인 중...';
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(t => t.stop());
+    } catch (permErr) {
+      transcriptBox.classList.add('hidden');
+      micBtn.style.display = 'none';
+      micUnavailableNote.classList.remove('hidden');
+      typedAnswer.classList.remove('hidden');
+      return;
+    }
+
+    finalTranscript = ''; lastInterim = '';
+    recognition = new SpeechRecognitionAPI();
+    recognition.lang = 'en-US'; recognition.interimResults = true; recognition.continuous = true;
+
+    recognition.onstart = () => {
+      isRecording = true; micBtn.textContent = '녹음 중지';
+      waveBox.style.display = 'flex';
+      transcriptBox.textContent = '듣고 있어요...';
+      feedbackBtn.classList.add('hidden');
+    };
+    recognition.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const chunk = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalTranscript += chunk + ' ';
+        else interim += chunk;
+      }
+      lastInterim = interim;
+      transcriptBox.textContent = finalTranscript + interim;
+    };
+    recognition.onerror = (event) => {
+      transcriptBox.textContent = '음성 인식 오류: ' + event.error;
+      waveBox.style.display = 'none';
+    };
+    recognition.onend = () => {
+      isRecording = false; micBtn.textContent = '다시 녹음하기';
+      waveBox.style.display = 'none';
+      if (!finalTranscript.trim() && lastInterim.trim()) { finalTranscript = lastInterim; transcriptBox.textContent = finalTranscript; }
+      if (finalTranscript.trim()) feedbackBtn.classList.remove('hidden');
+      else transcriptBox.textContent = '음성이 인식되지 않았어요. 다시 시도해보세요.';
+    };
+    recognition.start();
+  });
+
+  feedbackBtn.addEventListener('click', async () => {
+    feedbackBtn.classList.add('hidden');
+    document.getElementById('feedbackLoading').classList.remove('hidden');
+
+    const systemPrompt = `당신은 업무 영어회화 코치입니다. 학습자가 작성/발화한 영어 문장을 검토합니다.
+
+절대 규칙:
+- 사람 이름의 성별을 이름만 보고 추측해서 he/she/his/her를 임의로 판단하지 말 것. 원문에 이미 쓰인 대명사가 있으면 존중하고, 없으면 추가하지 말 것.
+- 코멘트는 각 1문장, 짧고 명확하게.
+
+두 가지를 만드세요:
+1) corrected: 원문 문장을 유지하며 문법 오류만 마크업. 치환: {-틀린단어-}{+고친단어+}. 추가: {+추가단어+}. 오류 없으면 마크업 없이 원문 그대로.
+2) native: 같은 의미의 더 자연스러운 완성 문장 전체를 쓰되, 핵심 변경 부분만 {*이 부분*}로 감싼다.
+
+JSON만 출력:
+{"corrected": {"markup":"...", "comment":"..."}, "native": {"markup":"...", "comment":"..."}}`;
+
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ systemPrompt, userMessage: `학습자 문장: "${finalTranscript.trim()}"` })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '서버 오류가 발생했어요');
+      const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n");
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      STATE.feedback = JSON.parse(jsonMatch[0]);
+      STATE.view = 'feedback';
+      render();
+    } catch (err) {
+      document.getElementById('feedbackLoading').classList.add('hidden');
+      alert('피드백 생성 중 오류: ' + err.message);
+      feedbackBtn.classList.remove('hidden');
+    }
+  });
+}
+
+function renderCorrectionMarkup(markup) {
+  if (!markup) return '';
+  let out = escapeHtml(markup);
+  out = out.replace(/\{-(.*?)-\}\{\+(.*?)\+\}/g,
+    '<span style="position:relative; display:inline-block; padding-top:13px; vertical-align:bottom;"><span style="position:absolute; top:-3px; left:50%; transform:translateX(-50%); font-size:10px; color:#8A2A22; white-space:nowrap; font-weight:500;">$2</span><span style="text-decoration:line-through; color:#8A2A22;">$1</span></span>');
+  out = out.replace(/\{-(.*?)-\}/g, '<span style="color:#8A2A22; text-decoration:line-through;">$1</span>');
+  out = out.replace(/\{\+(.*?)\+\}/g, '<span style="color:#8A2A22; font-weight:500;">$1</span>');
+  return out;
+}
+function renderNativeMarkup(markup) {
+  if (!markup) return '';
+  let out = escapeHtml(markup);
+  out = out.replace(/\{\*(.*?)\*\}/g, '<span style="color:#185FA5; font-weight:600;">$1</span>');
+  return out;
+}
+
+function renderFeedback() {
+  const f = STATE.feedback;
+  app.innerHTML = `
+    <div class="back-row" id="backBtn">
+      <span style="font-family:'Paperlogy', sans-serif; font-size:16px;">←</span>
+      <span class="page-title">Correction desk</span>
+    </div>
+    <div class="card" style="margin-bottom:14px;">
+      <div class="label">GRAMMAR CHECK</div>
+      <div style="font-family:'Paperlogy', sans-serif; font-weight:400; font-size:14px; color:#1E1E1C; line-height:1.8;">${renderCorrectionMarkup(f.corrected.markup)}</div>
+      <div style="font-family:'Pretendard', sans-serif; font-size:12px; color:#8A8983; margin-top:12px;">${escapeHtml(f.corrected.comment)}</div>
+    </div>
+    <div class="card" style="margin-bottom:22px;">
+      <div class="label">NATIVE SUGGESTION</div>
+      <div style="font-family:'Paperlogy', sans-serif; font-weight:400; font-size:14px; color:#1E1E1C; line-height:1.7;">${renderNativeMarkup(f.native.markup)}</div>
+      <div style="font-family:'Pretendard', sans-serif; font-size:12px; color:#8A8983; margin-top:10px;">${escapeHtml(f.native.comment)}</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn-secondary" id="retryBtn">다시 연습</button>
+      <button class="btn-secondary" id="doneBtn" style="background:#1E1E1C; color:#EDEBE6;">오늘의 학습 완료</button>
+    </div>
+  `;
+  document.getElementById('backBtn').addEventListener('click', () => { STATE.view = 'speaking'; render(); });
+  document.getElementById('retryBtn').addEventListener('click', () => { STATE.view = 'speaking'; render(); });
+  document.getElementById('doneBtn').addEventListener('click', async () => {
+    STATE.archive.unshift({
+      date: todayLabel(),
+      industry: STATE.industry,
+      headline: STATE.session.headlineEn,
+      headlineKo: STATE.session.headlineKo,
+      contextEn: STATE.session.contextEn,
+      expressions: STATE.session.expressions,
+      businessPhrases: STATE.session.businessPhrases,
+      speakingPromptEn: STATE.session.speakingPromptEn,
+      transcript: finalTranscript,
+      feedback: STATE.feedback
+    });
+    await saveArchive();
+    STATE.session = null; STATE.view = null; STATE.feedback = null;
+    render();
+  });
+}
+
+function renderScraps() {
+  const list = STATE.scraps.map(e => `
+    <div class="card" style="margin-bottom:10px;">
+      <div class="expr-term">${escapeHtml(e.term)}</div>
+      <div class="expr-meaning">${escapeHtml(e.meaning)}</div>
+      <div class="expr-example">"${escapeHtml(e.example)}"</div>
+    </div>
+  `).join('') || `<div class="card" style="text-align:center; color:#8A8983; font-size:13px;">아직 스크랩한 표현이 없어요.</div>`;
+
+  app.innerHTML = `
+    <div class="back-row" id="backBtn">
+      <span style="font-family:'Paperlogy', sans-serif; font-size:16px;">←</span>
+      <span style="font-family:'Paperlogy', sans-serif; font-weight:600; font-size:17px; color:#1E1E1C;">스크랩</span>
+    </div>
+    ${list}
+  `;
+  document.getElementById('backBtn').addEventListener('click', () => { goHome(); });
+}
+
+function renderArchive() {
+  const list = STATE.archive.map((a, i) => `
+    <div class="card" style="margin-bottom:10px; cursor:pointer;" data-idx="${i}">
+      <div style="font-family:'Paperlogy', sans-serif; font-size:11px; color:#8A8983; margin-bottom:6px;">${escapeHtml(a.date)} · ${escapeHtml(a.industry)}</div>
+      <div style="font-family:'Playfair Display', serif; font-size:14px; color:#1E1E1C;">${escapeHtml(a.headline)}</div>
+    </div>
+  `).join('') || `<div class="card" style="text-align:center; color:#8A8983; font-size:13px;">아직 완료한 학습이 없어요.</div>`;
+
+  app.innerHTML = `
+    <div class="back-row" id="backBtn">
+      <span style="font-family:'Paperlogy', sans-serif; font-size:16px;">←</span>
+      <span style="font-family:'Paperlogy', sans-serif; font-weight:600; font-size:17px; color:#1E1E1C;">지난 호</span>
+    </div>
+    ${list}
+  `;
+  document.getElementById('backBtn').addEventListener('click', () => { goHome(); });
+  document.querySelectorAll('[data-idx]').forEach(card => {
+    card.addEventListener('click', () => renderArchiveDetail(parseInt(card.getAttribute('data-idx'))));
+  });
+}
+
+function renderArchiveDetail(idx) {
+  const a = STATE.archive[idx];
+  const exprHtml = (a.expressions || []).map(e => `
+    <div class="card" style="margin-bottom:10px;">
+      <div class="expr-term">${escapeHtml(e.term)}</div>
+      <div class="expr-meaning">${escapeHtml(e.meaning)}</div>
+      <div class="expr-example">"${escapeHtml(e.example)}"</div>
+    </div>
+  `).join('');
+  const phraseHtml = (a.businessPhrases || []).map(p => `
+    <div class="card" style="margin-bottom:10px;"><div style="font-family:'Pretendard', sans-serif; font-size:13px; color:#1E1E1C;">"${escapeHtml(p)}"</div></div>
+  `).join('');
+  const feedbackHtml = a.feedback ? `
+    <div class="card" style="margin-bottom:10px;">
+      <div class="label">GRAMMAR CHECK</div>
+      <div style="font-family:'Paperlogy', sans-serif; font-size:14px; color:#1E1E1C; line-height:1.8;">${renderCorrectionMarkup(a.feedback.corrected.markup)}</div>
+      <div style="font-family:'Pretendard', sans-serif; font-size:12px; color:#8A8983; margin-top:12px;">${escapeHtml(a.feedback.corrected.comment)}</div>
+    </div>
+    <div class="card" style="margin-bottom:10px;">
+      <div class="label">NATIVE SUGGESTION</div>
+      <div style="font-family:'Paperlogy', sans-serif; font-size:14px; color:#1E1E1C; line-height:1.7;">${renderNativeMarkup(a.feedback.native.markup)}</div>
+      <div style="font-family:'Pretendard', sans-serif; font-size:12px; color:#8A8983; margin-top:10px;">${escapeHtml(a.feedback.native.comment)}</div>
+    </div>
+  ` : '';
+
+  app.innerHTML = `
+    <div class="back-row" id="backBtn">
+      <span style="font-family:'Paperlogy', sans-serif; font-size:16px;">←</span>
+      <span style="font-family:'Paperlogy', sans-serif; font-weight:600; font-size:17px; color:#1E1E1C;">지난 호</span>
+    </div>
+    <div style="font-family:'Paperlogy', sans-serif; font-size:11px; color:#8A8983; margin-bottom:10px;">${escapeHtml(a.date)} · ${escapeHtml(a.industry)}</div>
+    <div class="card" style="margin-bottom:14px;">
+      <div class="label">HEADLINE</div>
+      <div style="font-family:'Playfair Display', serif; font-weight:700; font-size:16px; color:#1E1E1C; line-height:1.4; margin-bottom:6px;">${escapeHtml(a.headline)}</div>
+      <div style="font-family:'Pretendard', sans-serif; font-size:12px; color:#8A8983;">${escapeHtml(a.headlineKo || '')}</div>
+    </div>
+    <div class="label" style="margin-top:6px;">NEWS EXPRESSIONS</div>
+    ${exprHtml}
+    <div class="label" style="margin-top:6px;">BUSINESS EXPRESSIONS</div>
+    ${phraseHtml}
+    ${a.transcript ? `<div class="label" style="margin-top:6px;">MY ANSWER</div>
+    <div class="card" style="margin-bottom:14px; font-family:'Pretendard', sans-serif; font-size:13px; color:#1E1E1C;">${escapeHtml(a.transcript)}</div>` : ''}
+    ${feedbackHtml}
+  `;
+  document.getElementById('backBtn').addEventListener('click', () => renderArchive());
+}
+
+async function resetAll() {
+  if (!confirm('스크랩, 지난 호, 검색 기록이 모두 삭제되고 처음 상태로 돌아가요. 계속할까요?')) return;
+  try {
+    await storage.delete('scraps');
+  } catch(e) {}
+  try {
+    await storage.delete('archive');
+  } catch(e) {}
+  try {
+    await storage.delete('prefs');
+  } catch(e) {}
+  try {
+    const listed = await storage.list('issue_');
+    if (listed && listed.keys) {
+      for (const k of listed.keys) {
+        try { await storage.delete(k); } catch(e) {}
+      }
+    }
+  } catch(e) {}
+
+  STATE.industry = '뮤지컬';
+  STATE.industryHistory = ['뮤지컬'];
+  STATE.session = null;
+  STATE.transcript = '';
+  STATE.scraps = [];
+  STATE.archive = [];
+  STATE.feedback = null;
+  goHome();
+}
+
+function todayLabel() {
+  return new Date().toLocaleDateString('ko-KR', { year:'numeric', month:'2-digit', day:'2-digit' }).replace(/\. /g, '.').replace(/\.$/, '');
+}
+
+(async function init() {
+  await loadStorageData();
+  render();
+})();
+</script>
+</body>
+</html>
